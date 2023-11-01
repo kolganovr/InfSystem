@@ -6,7 +6,9 @@ la = 0.3
 p = 0.119
 c = {1:2, 2:3, 3:3, 4:4}
 
-TIME_HANDLE = p / la
+FAST_MULT = 1
+
+TIME_HANDLE = p / la / FAST_MULT
 
 # Класс заявки
 class Task:
@@ -19,7 +21,7 @@ class Task:
     
     # Сравнение важности заявок
     def __gt__(self, other):
-        return self.importance > other.importance or (self.importance == other.importance and self.startTime < other.time)
+        return self.importance > other.importance or (self.importance == other.importance and self.startTime < other.startTime)
 
 
 # Класс очереди
@@ -51,7 +53,14 @@ class Queue:
         elif self.Qtype == "random":
             elem = self.items[random.randint(0, self.size()-1)]
             self.items.remove(elem)
-            return elem 
+            return elem
+        elif self.Qtype == "priority":
+            max = self.items[0]
+            for item in self.items:
+                if item > max:
+                    max = item
+            self.items.remove(max)
+            return max
         
     def getQueue(self):
         return self.items
@@ -63,42 +72,49 @@ class Handler:
         self.queue = queue
     
     def startWork(self):
-        time.sleep(TIME_HANDLE)
-        if queue.size() > 1:
+        if queue.size() == 1:
+            # Если в очереди только одна задача, то обрабатываем ее сразу
+            time.sleep(TIME_HANDLE)
+            self.queue.getItem()
+            return
+        elif queue.size() > 1:
+            time.sleep(TIME_HANDLE)
             # Штрафуем за все задачи которые не выполняеются сейчас по правилу:
             # время выполнения * стоимость задачи
             items = self.queue.getQueue()
-            for i in items:
-                self.penalty += (time.time() - i.startTime) * c[i.importance]
+            for item in items:
+                self.penalty += (time.time() - item.startTime) * c[item.importance] * FAST_MULT
         queue.getItem()
-    
 
-
-
+# Функции потоков
+# Функция обработки задач
 def handle_tasks():
     global task_count
+    print(handler.queue.Qtype)
     while task_count > 0:
         if queue.size() > 0:
             print(task_count, queue.size())
             handler.startWork()
             task_count -= 1
 
-
+# Функция добавления задач
 def add_tasks():
     global task_count
     while task_count > 0:
         if random.random() < p:
             importance = random.randint(1, 4)
             queue.add(Task(importance))
-        time.sleep(0.025)
-
+        time.sleep(0.025/FAST_MULT)
 
 if __name__ == "__main__":
+    timeStart = time.time()
+    # Seed для генератора случайных чисел
+    random.seed(1)
     task_count = 10
-    queue = Queue("FIFO")   # LIFO, FIFO, random
+    queue = Queue("LIFO") # LIFO, FIFO, random, priority
     handler = Handler(queue)
 
-    # Создаем два потока
+    # Создаем два потока для обработки и добавления задач параллельно
     handle_thread = threading.Thread(target=handle_tasks)
     add_thread = threading.Thread(target=add_tasks)
 
@@ -111,3 +127,4 @@ if __name__ == "__main__":
     add_thread.join()
 
     print("Штраф: " + str(handler.penalty))
+    print("Время работы: " + str(time.time() - timeStart))
