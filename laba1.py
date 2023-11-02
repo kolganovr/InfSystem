@@ -8,9 +8,9 @@ la = 0.3
 p = 0.119
 c = {1:2, 2:3, 3:3, 4:4}
 
-FAST_MULT = 1
+FAST_MULT = 2 # Ускорение работы программы
 
-TIME_HANDLE = p / la / FAST_MULT
+TIME_HANDLE = p / la / FAST_MULT # Время обработки одной задачи
 
 # Класс заявки
 class Task:
@@ -28,6 +28,7 @@ class Task:
 
 # Класс очереди
 class Queue:
+    timeInQueue = 0
     def __init__(self, Qtype):
         self.items = []
         if Qtype == 1:
@@ -38,6 +39,8 @@ class Queue:
             self.Qtype = "random"
         elif Qtype == 4:
             self.Qtype = "priority"
+        elif Qtype == 5:
+            self.Qtype = "Abs priority"
         else:
             self.Qtype = "LIFO"
 
@@ -56,25 +59,37 @@ class Queue:
     def getItem(self):
         # В зависимости от типа очереди (LIFO, FIFO, random) отправляем нужный элемент
         if self.Qtype == "LIFO":
-            return self.pop()
+            item = self.items.pop()
+            self.timeInQueue += time.time() - item.startTime
+            return item
         elif self.Qtype == "FIFO":
             elem = self.items[0]
+            self.timeInQueue += time.time() - elem.startTime
             self.items.remove(elem)
             return elem
         elif self.Qtype == "random":
             elem = self.items[random.randint(0, self.size()-1)]
+            self.timeInQueue += time.time() - elem.startTime
             self.items.remove(elem)
             return elem
-        elif self.Qtype == "priority":
+        elif self.Qtype == "priority" or self.Qtype == "Abs priority":
             max = self.items[0]
             for item in self.items:
                 if item > max:
                     max = item
             self.items.remove(max)
+            self.timeInQueue += time.time() - max.startTime
             return max
         
     def getQueue(self):
         return self.items
+    
+    def getTimeInQueue(self):
+        # Получаем время в очереди для каждой задачи оставшейся в очереди
+        for item in self.items:
+            self.timeInQueue += time.time() - item.startTime
+        return self.timeInQueue
+        
     
 # Класс Обработчика
 class Handler:
@@ -127,7 +142,7 @@ def getTasks():
         tasks.append(temp)
         time.sleep(0.025/FAST_MULT/10)
 
-# Построения 5 граффиков: кол-во задач каждого приоритета и общее кол-во задач от времени
+# Построения 4 граффиков: кол-во задач каждого приоритета и общее кол-во задач от времени
 def graph(tasks):
     importance1 = []
     importance2 = []
@@ -151,12 +166,11 @@ def graph(tasks):
     plt.ylabel("Tasks")
     plt.show()
 
-
 if __name__ == "__main__":
     random.seed(1)
     task_count = 10
     tasks = []
-    queue = Queue(1) # LIFO = 1, FIFO = 2, random = 3, priority = 4
+    queue = Queue(4) # LIFO = 1, FIFO = 2, random = 3, priority = 4
     handler = Handler(queue)
 
     # Создаем два потока для обработки и добавления задач параллельно
@@ -176,6 +190,7 @@ if __name__ == "__main__":
 
     # Выводим штраф
     print("Penalty: ", handler.penalty)
+    print("Average time in queue: ", queue.getTimeInQueue() / (10 + queue.size()) * FAST_MULT)
 
     # Строим графики
     graph(tasks)
