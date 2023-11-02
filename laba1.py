@@ -1,6 +1,8 @@
 import random
 import time
 import threading
+from matplotlib import pyplot as plt
+import numpy as np
 
 la = 0.3
 p = 0.119
@@ -28,7 +30,16 @@ class Task:
 class Queue:
     def __init__(self, Qtype):
         self.items = []
-        self.Qtype = Qtype
+        if Qtype == 1:
+            self.Qtype = "LIFO"
+        elif Qtype == 2:
+            self.Qtype = "FIFO"
+        elif Qtype == 3:
+            self.Qtype = "random"
+        elif Qtype == 4:
+            self.Qtype = "priority"
+        else:
+            self.Qtype = "LIFO"
 
     def isEmpty(self):
         return self.items == []
@@ -106,25 +117,65 @@ def add_tasks():
             queue.add(Task(importance))
         time.sleep(0.025/FAST_MULT)
 
+# Поточная функция считывания задач из очереди с их приоритетами и записью в список для дальнейшего вывода на график
+def getTasks():
+    global task_count
+    while task_count > 0:
+        temp = []
+        for item in queue.getQueue():
+            temp.append(item.importance)
+        tasks.append(temp)
+        time.sleep(0.025/FAST_MULT/10)
+
+# Построения 5 граффиков: кол-во задач каждого приоритета и общее кол-во задач от времени
+def graph(tasks):
+    importance1 = []
+    importance2 = []
+    importance3 = []
+    importance4 = []
+    # allTasks = []
+    for timestamp in tasks:
+        importance1.append(timestamp.count(1))
+        importance2.append(timestamp.count(2))
+        importance3.append(timestamp.count(3))
+        importance4.append(timestamp.count(4))
+        # allTasks.append(len(timestamp))
+    x = np.arange(0, len(tasks), 1)
+    plt.plot(x, importance1, label="importance1")
+    plt.plot(x, importance2, label="importance2")
+    plt.plot(x, importance3, label="importance3")
+    plt.plot(x, importance4, label="importance4")
+    # plt.plot(x, allTasks, label="allTasks")
+    plt.legend()
+    plt.xlabel("Time")
+    plt.ylabel("Tasks")
+    plt.show()
+
+
 if __name__ == "__main__":
-    timeStart = time.time()
-    # Seed для генератора случайных чисел
     random.seed(1)
     task_count = 10
-    queue = Queue("LIFO") # LIFO, FIFO, random, priority
+    tasks = []
+    queue = Queue(1) # LIFO = 1, FIFO = 2, random = 3, priority = 4
     handler = Handler(queue)
 
     # Создаем два потока для обработки и добавления задач параллельно
     handle_thread = threading.Thread(target=handle_tasks)
     add_thread = threading.Thread(target=add_tasks)
+    getTasks_thread = threading.Thread(target=getTasks)
 
     # Запускаем потоки
     handle_thread.start()
     add_thread.start()
+    getTasks_thread.start()
 
     # Ждем завершения потоков
     handle_thread.join()
     add_thread.join()
+    getTasks_thread.join()
 
-    print("Штраф: " + str(handler.penalty))
-    print("Время работы: " + str(time.time() - timeStart))
+    # Выводим штраф
+    print("Penalty: ", handler.penalty)
+
+    # Строим графики
+    graph(tasks)
