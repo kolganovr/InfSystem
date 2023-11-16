@@ -6,17 +6,23 @@ import numpy as np
 
 la = 0.3
 p = 0.119
-c = {1:2, 2:3, 3:3, 4:4}
+c = {1:2, 2:3, 3:3, 4:4} # Важность задачи:штраф за единицу времени простоя 
 
 FAST_MULT = 2 # Ускорение работы программы
 
 TIME_HANDLE = p / la / FAST_MULT # Время обработки одной задачи
+
+doNowTask = None 
+interrupt = False
+
+counter = 0
 
 # Класс заявки
 class Task:
     def __init__(self, importance):
         self.importance = importance
         self.startTime = time.time()
+        self.timeHandled = 0
     
     def __str__(self):
         return "Importance " + str(self.importance) + ", time: " + str(self.startTime)
@@ -74,11 +80,14 @@ class Queue:
             self.items.remove(elem)
             return elem
         elif self.Qtype == "priority" or self.Qtype == "Abs priority":
-            max = self.items[0]
-            self.items = [max if item > max else item for item in self.items]
-            self.items.remove(max)
-            self.timeInQueue += time.time() - max.startTime
-            return max
+            # Если очередь по приоритету, то возвращаем элемент с наибольшим приоритетом
+            elem = self.items[0]
+            for item in self.items:
+                if item > elem:
+                    elem = item
+            self.timeInQueue += time.time() - elem.startTime
+            self.items.remove(elem)
+            return elem
         
     def getQueue(self):
         return self.items
@@ -93,21 +102,33 @@ class Queue:
 # Класс Обработчика
 class Handler:
     penalty = 0
+    currentTask = None
     
     def startWork(self):
-        if queue.size == 1:
-            # Если в очереди только одна задача, то обрабатываем ее сразу
-            time.sleep(TIME_HANDLE)
-            queue.getItem()
-            return
-        elif queue.size > 1:
-            time.sleep(TIME_HANDLE)
-            # Штрафуем за все задачи которые не выполняеются сейчас по правилу:
-            # время выполнения * стоимость задачи
-            items = queue.getQueue()
-            for item in items:
-                self.penalty += (time.time() - item.startTime) * c[item.importance] * FAST_MULT
-        queue.getItem()
+        global interrupt
+        global doNowTask
+        global counter
+    
+        self.currentTask = queue.getItem()
+        counter += 1
+        print("Start work with ", counter, " task", "priority: ", self.currentTask.importance)
+
+        loopStartTime = time.time()
+        while time.time() - loopStartTime + self.currentTask.timeHandled < TIME_HANDLE:     
+            if interrupt and queue.Qtype == "Abs priority":
+                loopStartTime = time.time()
+                self.currentTask = doNowTask
+                interrupt = False
+                doNowTask = None
+
+        # Штрафуем за все задачи которые не выполняеются сейчас по правилу:
+        # время выполнения * стоимость задачи
+        items = queue.getQueue()
+        for item in items:
+            self.penalty += (time.time() - item.startTime) * c[item.importance] * FAST_MULT
+        
+        self.currentTask = None
+        
 
 # Функции потоков
 # Функция обработки задач
@@ -123,10 +144,27 @@ def handle_tasks():
 # Функция добавления задач
 def add_tasks():
     global task_count
+    global interrupt
+    global doNowTask
     while task_count > 0:
         if random.random() < p:
             importance = random.randint(1, 4)
-            queue.add(Task(importance))
+            if queue.Qtype == "Abs priority" and handler.currentTask and importance > handler.currentTask.importance:
+                try:
+                    # Если пришла задача с большим приоритетом, то останавливаем выполнение текущей задачи и добавляем ее в очередь, начинаем выполнение пришедше задачи
+                    print("Interrupt")
+                    interrupt = True
+                    handler.currentTask.timeHandled += time.time() - handler.currentTask.startTime
+                    queue.add(handler.currentTask)
+                    doNowTask = Task(importance)
+                except:
+                    print("Interrupt cancelled")
+                    interrupt = False
+                    doNowTask = None
+                finally:
+                    print("finally")
+            else:
+                queue.add(Task(importance))
         time.sleep(0.025/FAST_MULT)
 
 # Поточная функция считывания задач из очереди с их приоритетами и записью в список для дальнейшего вывода на график
@@ -157,9 +195,12 @@ def graph(tasks):
 
 if __name__ == "__main__":
     random.seed(1)
-    task_count = 10
+    task_count = 20
     tasks = []
-    queue = Queue(4) # LIFO = 1, FIFO = 2, random = 3, priority = 4
+    queue = Queue(5) # LIFO = 1, FIFO = 2, random = 3, priority = 4
+    for i in range(10):
+        queue.add(Task(random.randint(1, 4)))
+
     handler = Handler()
 
     # Создаем два потока для обработки и добавления задач параллельно
