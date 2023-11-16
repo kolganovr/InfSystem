@@ -28,9 +28,9 @@ class Task:
 
 # Класс очереди
 class Queue:
-    timeInQueue = 0
     def __init__(self, Qtype):
         self.items = []
+        self.timeInQueue = 0
         if Qtype == 1:
             self.Qtype = "LIFO"
         elif Qtype == 2:
@@ -53,6 +53,7 @@ class Queue:
     def pop(self):
         return self.items.pop()
 
+    @property
     def size(self):
         return len(self.items)
 
@@ -68,15 +69,13 @@ class Queue:
             self.items.remove(elem)
             return elem
         elif self.Qtype == "random":
-            elem = self.items[random.randint(0, self.size()-1)]
+            elem = self.items[random.randint(0, self.size - 1)]
             self.timeInQueue += time.time() - elem.startTime
             self.items.remove(elem)
             return elem
         elif self.Qtype == "priority" or self.Qtype == "Abs priority":
             max = self.items[0]
-            for item in self.items:
-                if item > max:
-                    max = item
+            self.items = [max if item > max else item for item in self.items]
             self.items.remove(max)
             self.timeInQueue += time.time() - max.startTime
             return max
@@ -98,12 +97,12 @@ class Handler:
         self.queue = queue
     
     def startWork(self):
-        if queue.size() == 1:
+        if queue.size == 1:
             # Если в очереди только одна задача, то обрабатываем ее сразу
             time.sleep(TIME_HANDLE)
             self.queue.getItem()
             return
-        elif queue.size() > 1:
+        elif queue.size > 1:
             time.sleep(TIME_HANDLE)
             # Штрафуем за все задачи которые не выполняеются сейчас по правилу:
             # время выполнения * стоимость задачи
@@ -118,8 +117,8 @@ def handle_tasks():
     global task_count
     print(handler.queue.Qtype)
     while task_count > 0:
-        if queue.size() > 0:
-            print(task_count, queue.size())
+        if queue.size > 0:
+            print(task_count, queue.size)
             handler.startWork()
             task_count -= 1
 
@@ -142,25 +141,17 @@ def getTasks():
         tasks.append(temp)
         time.sleep(0.025/FAST_MULT/10)
 
-# Построения 4 граффиков: кол-во задач каждого приоритета и общее кол-во задач от времени
+# Построения 4 графиков: кол-во задач каждого приоритета и общее кол-во задач от времени
 def graph(tasks):
-    importance1 = []
-    importance2 = []
-    importance3 = []
-    importance4 = []
+    importance = [[], [], [], []]
+    x = np.arange(0, len(tasks), 1)
     # allTasks = []
     for timestamp in tasks:
-        importance1.append(timestamp.count(1))
-        importance2.append(timestamp.count(2))
-        importance3.append(timestamp.count(3))
-        importance4.append(timestamp.count(4))
+        for k in range(4):
+            importance[k].append(timestamp.count(k + 1))
         # allTasks.append(len(timestamp))
-    x = np.arange(0, len(tasks), 1)
-    plt.plot(x, importance1, label="importance1")
-    plt.plot(x, importance2, label="importance2")
-    plt.plot(x, importance3, label="importance3")
-    plt.plot(x, importance4, label="importance4")
     # plt.plot(x, allTasks, label="allTasks")
+    [plt.plot(x, importance[i], label=f"importance{i}") for i in range(4)]
     plt.legend()
     plt.xlabel("Time")
     plt.ylabel("Tasks")
@@ -177,20 +168,19 @@ if __name__ == "__main__":
     handle_thread = threading.Thread(target=handle_tasks)
     add_thread = threading.Thread(target=add_tasks)
     getTasks_thread = threading.Thread(target=getTasks)
+    threads = [handle_thread, add_thread, getTasks_thread]
 
-    # Запускаем потоки
-    handle_thread.start()
-    add_thread.start()
-    getTasks_thread.start()
 
-    # Ждем завершения потоков
-    handle_thread.join()
-    add_thread.join()
-    getTasks_thread.join()
+    # Запускаем потоки и ждем их окончания
+    for thread in threads:
+        thread.start()
+
+    for thread in threads:
+        thread.join()
 
     # Выводим штраф
     print("Penalty: ", handler.penalty)
-    print("Average time in queue: ", queue.getTimeInQueue() / (10 + queue.size()) * FAST_MULT)
+    print("Average time in queue: ", queue.getTimeInQueue() / (10 + queue.size) * FAST_MULT)
 
     # Строим графики
     graph(tasks)
