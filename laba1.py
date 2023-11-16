@@ -93,20 +93,18 @@ class Queue:
 # Класс Обработчика
 class Handler:
     penalty = 0
-    def __init__(self, queue):
-        self.queue = queue
     
     def startWork(self):
         if queue.size == 1:
             # Если в очереди только одна задача, то обрабатываем ее сразу
             time.sleep(TIME_HANDLE)
-            self.queue.getItem()
+            queue.getItem()
             return
         elif queue.size > 1:
             time.sleep(TIME_HANDLE)
             # Штрафуем за все задачи которые не выполняеются сейчас по правилу:
             # время выполнения * стоимость задачи
-            items = self.queue.getQueue()
+            items = queue.getQueue()
             for item in items:
                 self.penalty += (time.time() - item.startTime) * c[item.importance] * FAST_MULT
         queue.getItem()
@@ -115,7 +113,7 @@ class Handler:
 # Функция обработки задач
 def handle_tasks():
     global task_count
-    print(handler.queue.Qtype)
+    print(queue.Qtype)
     while task_count > 0:
         if queue.size > 0:
             print(task_count, queue.size)
@@ -162,7 +160,7 @@ if __name__ == "__main__":
     task_count = 10
     tasks = []
     queue = Queue(4) # LIFO = 1, FIFO = 2, random = 3, priority = 4
-    handler = Handler(queue)
+    handler = Handler()
 
     # Создаем два потока для обработки и добавления задач параллельно
     handle_thread = threading.Thread(target=handle_tasks)
