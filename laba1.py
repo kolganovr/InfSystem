@@ -50,21 +50,14 @@ class Queue:
         else:
             self.Qtype = "LIFO"
 
-    def isEmpty(self):
-        return self.items == []
-
     def add(self, item):
         self.items.insert(0, item)
 
     def pop(self):
         return self.items.pop()
 
-    @property
-    def size(self):
-        return len(self.items)
-
     def getItem(self):
-        # В зависимости от типа очереди (LIFO, FIFO, random) отправляем нужный элемент
+        # В зависимости от типа очереди отправляем нужный элемент
         if self.Qtype == "LIFO":
             item = self.items.pop()
             self.timeInQueue += time.time() - item.startTime
@@ -80,7 +73,6 @@ class Queue:
             self.items.remove(elem)
             return elem
         elif self.Qtype == "priority" or self.Qtype == "Abs priority":
-            # Если очередь по приоритету, то возвращаем элемент с наибольшим приоритетом
             elem = self.items[0]
             for item in self.items:
                 if item > elem:
@@ -91,17 +83,11 @@ class Queue:
         
     def getQueue(self):
         return self.items
-    
-    def getTimeInQueue(self):
-        # Получаем время в очереди для каждой задачи оставшейся в очереди
-        for item in self.items:
-            self.timeInQueue += time.time() - item.startTime
-        return self.timeInQueue
         
-    
 # Класс Обработчика
 class Handler:
     penalty = 0
+    TimeByPriority = {1:0, 2:0, 3:0, 4:0}
     currentTask = None
     
     def startWork(self):
@@ -126,8 +112,15 @@ class Handler:
         items = queue.getQueue()
         for item in items:
             self.penalty += (time.time() - item.startTime) * c[item.importance] * FAST_MULT
+            self.TimeByPriority[item.importance] += (time.time() - item.startTime) * FAST_MULT
         
         self.currentTask = None
+
+    def getTimeByPriority(self):
+        items = queue.getQueue()
+        for item in items:
+            self.TimeByPriority[item.importance] += (time.time() - item.startTime) * FAST_MULT
+        return self.TimeByPriority
         
 
 # Функции потоков
@@ -151,7 +144,6 @@ def add_tasks():
             importance = random.randint(1, 4)
             if queue.Qtype == "Abs priority" and handler.currentTask and importance > handler.currentTask.importance:
                 try:
-                    # Если пришла задача с большим приоритетом, то останавливаем выполнение текущей задачи и добавляем ее в очередь, начинаем выполнение пришедше задачи
                     print("Interrupt")
                     interrupt = True
                     handler.currentTask.timeHandled += time.time() - handler.currentTask.startTime
@@ -165,7 +157,7 @@ def add_tasks():
                     print("finally")
             else:
                 queue.add(Task(importance))
-        time.sleep(0.025/FAST_MULT)
+        time.sleep(0.0001/FAST_MULT)
 
 # Поточная функция считывания задач из очереди с их приоритетами и записью в список для дальнейшего вывода на график
 def getTasks():
@@ -181,12 +173,9 @@ def getTasks():
 def graph(tasks):
     importance = [[], [], [], []]
     x = np.arange(0, len(tasks), 1)
-    # allTasks = []
     for timestamp in tasks:
         for k in range(4):
             importance[k].append(timestamp.count(k + 1))
-        # allTasks.append(len(timestamp))
-    # plt.plot(x, allTasks, label="allTasks")
     [plt.plot(x, importance[i], label=f"importance{i}") for i in range(4)]
     plt.legend()
     plt.xlabel("Time")
@@ -197,29 +186,31 @@ if __name__ == "__main__":
     random.seed(1)
     task_count = 20
     tasks = []
-    queue = Queue(5) # LIFO = 1, FIFO = 2, random = 3, priority = 4
-    for i in range(10):
-        queue.add(Task(random.randint(1, 4)))
+    queue = Queue(4) # LIFO = 1, FIFO = 2, random = 3, priority = 4, Abs priority = 5
 
     handler = Handler()
 
-    # Создаем два потока для обработки и добавления задач параллельно
+    # Создаем потоки
     handle_thread = threading.Thread(target=handle_tasks)
     add_thread = threading.Thread(target=add_tasks)
     getTasks_thread = threading.Thread(target=getTasks)
     threads = [handle_thread, add_thread, getTasks_thread]
 
-
-    # Запускаем потоки и ждем их окончания
+    # Запускаем потоки
     for thread in threads:
         thread.start()
 
+    # Ожидаем завершения потоков
     for thread in threads:
         thread.join()
 
-    # Выводим штраф
+    # Выводим информацию
+    print()
+    print(f'Queue type: {queue.Qtype}')
     print("Penalty: ", handler.penalty)
-    print("Average time in queue: ", queue.getTimeInQueue() / (10 + queue.size) * FAST_MULT)
+    TimeByPriority = handler.getTimeByPriority()
+    print("Average time by priority: ", sum(TimeByPriority) / len(TimeByPriority))
+    print(TimeByPriority)
 
     # Строим графики
     graph(tasks)
